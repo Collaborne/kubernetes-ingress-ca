@@ -8,6 +8,7 @@ const yargs = require('yargs');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const tmp = require('tmp');
 
 const argv = yargs
 	.default('secrets', 'tinyca')
@@ -16,7 +17,11 @@ const argv = yargs
 	.alias('cert', 'client-certificate').describe('client-certificate', 'Path to a client certificate file for TLS')
 	.alias('key', 'client-key').describe('client-key', 'Path to a client key file for TLS')
 	.boolean('insecure-skip-tls-verify').describe('insecure-skip-tls-verify', 'If true, the server\'s certificate will not be checked for validity. This will make your HTTPS connections insecure')
-	.describe('token', 'Bearer token for authentication to the API server')    
+	.describe('token', 'Bearer token for authentication to the API server')
+	.describe('self-signed-cn', 'CN for automatically provisioned self-signed root certificate')
+	.default('self-signed-days', 1).describe('self-signed-days', 'Validity of self-signed root certificate')
+	.default('namespace', 'default').describe('namespace', 'Namespace in which to create the secret')
+	.default('secret', 'ingress-ca').describe('secret', 'Name of the secret containing the root CA certificates')
 	.help()
 	.argv;
 
@@ -70,11 +75,62 @@ if (argv.server) {
 const k8s = require('auto-kubernetes-client');
 
 k8s(k8sConfig).then(function(k8sClient) {
-	const ingresses = k8sClient.group('extensions', 'v1beta1').ns('master').ingresses;
-	
+	// Find the secret and read the certificate information from it.
+	// The secret may be missing, or we might be missing data in it.
+	k8sClient.ns(argv.namespace).secret(argv.secret).get().then(function(result) {
+		if (result.kind === 'Status' && result.status === 'NotFound') {
+			k8sClient.ns(argv.namespace).secrets.create({
+				metadata: {
+					name: argv.secret
+				},
+				stringData: {
+					dummy: 'dummy'
+				}
+			}).then(function(secret) {
+				console.log(`Created secret ${secret.metadata.name}`);
+			});
+		}
+	});
+	if (argv.selfSignedCaSubject) {
+		// Create a self-signed root CA certificate
+		// XXX: Should we verify whether that already exists in our secret?
+		const config = `
+			[req]
+			distinguished_name=req_distinguished_name
+			[req_distinguished_name]
+			[ext]
+			basicConstraints=CA:TRUE,pathlen:0`;
+		// openssl req -config <(echo "$CONFIG") -new -newkey rsa:2048 -nodes -subj "/CN=Hello" -x509 -extensions ext -keyout key.pem -out crt.pem
+		// Need to catch the files, so must provide a temp directory + filenames
+		tmp.dir({ unsafeCleanup: true }, function(err, dir, cleanupCallback) {
+			console.log(dir);
+			fs.writeFileSync(path.resolve(dir, 'openssl.cnf'), config, { encoding: 'UTF-8' });
+			openssl('req', new Buffer(config), {
+				'batch': true,
+				'new': true,
+				'newkey': 'rsa:2048',
+				'x509': true,
+				'nodes': true,
+				'subj': `/CN=${argv.selfSignedCaSubject}`,
+				'keyout': path.resolve(dir, 'key.pem'),
+				'out': path.resolve(dir, 'cert.pem'),
+				'config': path.resolve(dir, 'openssl.cnf'),
+				'extensions': 'ext',
+			}, function(err, stdout) {
+				if (err) {
+					console.log(err.message);
+				}
+				console.log(stdout.toString('utf-8'));
+
+				return cleanupCallback();
+			});
+		});
+	}
+
+	const ingresses = k8sClient.group('extensions', 'v1beta1').ns(argv.namespace).ingresses;
 	ingresses.list().then(function(ingressList) {
 		console.log(`list: * (${ingressList.metadata.resourceVersion})`);
-		ingressList.items.forEach(function(item) {			
+		ingressList.items.forEach(function(item) {
 			console.log(`list: ${item.metadata.name} (${item.metadata.resourceVersion})`);
 		});
 
