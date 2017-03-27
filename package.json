@@ -32,6 +32,7 @@
     "npm-warn-shrinkwrap": "^1.0.2",
     "openssl-wrapper": "^0.3.4",
     "request": "^2.81.0",
+    "tmp": "0.0.31",
     "yargs": "^7.0.2"
   },
   "devDependencies": {
