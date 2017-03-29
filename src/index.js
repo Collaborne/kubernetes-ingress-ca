@@ -18,7 +18,7 @@ const argv = yargs
 	.alias('key', 'client-key').describe('client-key', 'Path to a client key file for TLS')
 	.boolean('insecure-skip-tls-verify').describe('insecure-skip-tls-verify', 'If true, the server\'s certificate will not be checked for validity. This will make your HTTPS connections insecure')
 	.describe('token', 'Bearer token for authentication to the API server')
-	.describe('self-signed-cn', 'CN for automatically provisioned self-signed root certificate')
+	.default('self-signed-cn', '/CN=kubernetes-ingress-ca').describe('self-signed-cn', 'CN for automatically provisioned self-signed root certificate')
 	.default('self-signed-days', 1).describe('self-signed-days', 'Validity of self-signed root certificate')
 	.default('namespace', 'default').describe('namespace', 'Namespace in which to create the secret')
 	.default('secret', 'ingress-ca').describe('secret', 'Name of the secret containing the root CA certificates')
