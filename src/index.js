@@ -137,8 +137,18 @@ k8s(k8sConfig).then(function(k8sClient) {
 					return createRootCertificate(secret, argv.selfSignedCn);
 				}
 			});
-		} else if (argv.selfSignedCn) {
-			return createRootCertificate(result, argv.selfSignedCn);
+		} else if (result.kind === 'Secret') {
+			// Check that we have a key and certificate in them
+			if (result.data['cert.pem'] && result.data['key.pem']) {
+				return openssl('x509', Buffer.from(result.data['cert.pem'], 'base64'), { subject: true, noout: true }, function(err, stdout) {
+					const subject = stdout.toString('UTF-8').substring('subject= '.length).trim();
+					console.log(`Using existing cert.pem/key.pem from secrets ${result.metadata.name}: ${subject}`);
+				});
+			} else if (argv.selfSignedCn) {
+				return createRootCertificate(result, argv.selfSignedCn);
+			} else {
+				console.warn(`Missing cert.pem/key.pem in secrets ${result.metadata.name}`);
+			}
 		}
 	});
 
