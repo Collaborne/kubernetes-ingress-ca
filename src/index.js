@@ -2,16 +2,13 @@
 
 'use strict';
 
-const request = require('request');
 const openssl = require('openssl-wrapper').exec;
 const yargs = require('yargs');
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
 const tmp = require('tmp');
 
 const argv = yargs
-	.default('secrets', 'tinyca')
 	.alias('s', 'server').describe('server', 'The address and port of the Kubernetes API server')
 	.alias('cacert', 'certificate-authority').describe('certificate-authority', 'Path to a cert. file for the certificate authority')
 	.alias('cert', 'client-certificate').describe('client-certificate', 'Path to a client certificate file for TLS')
@@ -19,7 +16,6 @@ const argv = yargs
 	.boolean('insecure-skip-tls-verify').describe('insecure-skip-tls-verify', 'If true, the server\'s certificate will not be checked for validity. This will make your HTTPS connections insecure')
 	.describe('token', 'Bearer token for authentication to the API server')
 	.default('self-signed-cn', '/CN=kubernetes-ingress-ca').describe('self-signed-cn', 'CN for automatically provisioned self-signed root certificate')
-	.default('self-signed-days', 1).describe('self-signed-days', 'Validity of self-signed root certificate')
 	.default('namespace', 'default').describe('namespace', 'Namespace in which to create the secret')
 	.default('secret', 'ingress-ca').describe('secret', 'Name of the secret containing the root CA certificates')
 	.help()
@@ -75,93 +71,311 @@ if (argv.server) {
 const k8s = require('auto-kubernetes-client');
 
 k8s(k8sConfig).then(function(k8sClient) {
-	function createRootCertificate(secret, subject) {
+	function createRootCertificatePair(subject) {
 		// Create a self-signed root CA certificate
-		// XXX: Should we verify whether that already exists in our secret?
 		const config = `
 			[req]
 			distinguished_name=req_distinguished_name
 			[req_distinguished_name]
-			[ext]
+			[v3_ext]
 			basicConstraints=CA:TRUE,pathlen:0`;
-		// openssl req -config <(echo "$CONFIG") -new -newkey rsa:2048 -nodes -subj "/CN=Hello" -x509 -extensions ext -keyout key.pem -out crt.pem
-		// Need to catch the files, so must provide a temp directory + filenames
-		tmp.dir({ unsafeCleanup: true }, function(err, dir, cleanupCallback) {
-			console.log(dir);
-			fs.writeFileSync(path.resolve(dir, 'openssl.cnf'), config, { encoding: 'UTF-8' });
-			const certPath = path.resolve(dir, 'cert.pem');
-			const keyPath = path.resolve(dir, 'key.pem');
-			openssl('req', new Buffer(config), {
-				'batch': true,
-				'new': true,
-				'newkey': 'rsa:2048',
-				'x509': true,
-				'nodes': true,
-				'subj': `/CN=${subject}`,
-				'keyout': keyPath,
-				'out': certPath,
-				'config': path.resolve(dir, 'openssl.cnf'),
-				'extensions': 'ext',
-			}, function(err, stdout) {
-				if (err) {
-					console.log(err.message);
-				}
-
-				// We now have the certificate and the key, and should be able to update the certificate with these.
-				const update = {
-					stringData: {
-						'cert.pem': fs.readFileSync(certPath, 'UTF-8'),
-						'key.pem': fs.readFileSync(keyPath, 'UTF-8')
+		return new Promise(function(resolve, reject) {
+			tmp.dir({ unsafeCleanup: true }, function(err, dir, cleanupCallback) {
+				fs.writeFileSync(path.resolve(dir, 'openssl.cnf'), config, { encoding: 'UTF-8' });
+				const certPath = path.resolve(dir, 'cert.pem');
+				const keyPath = path.resolve(dir, 'key.pem');
+				openssl('req', {
+					'batch': true,
+					'new': true,
+					'newkey': 'rsa:2048',
+					'x509': true,
+					'nodes': true,
+					'subj': `/CN=${subject}`,
+					'keyout': keyPath,
+					'out': certPath,
+					'config': path.resolve(dir, 'openssl.cnf'),
+					'extensions': 'v3_ext',
+				}, function(err, stdout) {
+					if (err) {
+						return reject(err);
 					}
-				};
 
-				return k8sClient.ns(secret.metadata.namespace).secret(secret.metadata.name).update(update).then(function(result) {
-					if (result.kind === 'Status') {
-						console.warn(`Failed to update secret: ${result.reason} ${result.message}`);
+					const certificatePair = {
+						cert: fs.readFileSync(certPath, 'UTF-8'),
+						key: fs.readFileSync(keyPath, 'UTF-8')
 					}
-					return cleanupCallback();
-				})
+					
+					if (typeof cleanupCallback === 'function') {
+						cleanupCallback();
+					}
+
+					return resolve(certificatePair);
+				});
 			});
 		});
 	}
 
-	k8sClient.ns(argv.namespace).secret(argv.secret).get().then(function(result) {
-		if (result.kind === 'Status' && result.reason === 'NotFound') {
-			k8sClient.ns(argv.namespace).secrets.create({
-				metadata: {
-					name: argv.secret
+	function storeRootCertificatePair(ns, name, certificatePair) {
+		// We now have the certificate and the key, and should be able to update the certificate with these.
+		const update = {
+			stringData: {
+				'ca.crt': certificatePair.cert,
+				'ca.key': certificatePair.key
+			}
+		};
+
+		return k8sClient.ns(ns).secret(name).update(update).then(function(result) {
+			if (result.kind === 'Status') {
+				console.warn(`Failed to update secret: ${result.reason} ${result.message}`);
+			}
+			return result;
+		});
+	}
+
+	function extractRootCertificatePair(secret) {
+		if (secret.data && secret.data['ca.crt'] && secret.data['ca.key']) {
+			return {
+				cert: Buffer.from(secret.data['ca.crt'], 'base64').toString('UTF-8'),
+				key: Buffer.from(secret.data['ca.key'], 'base64').toString('UTF-8')
+			};
+		} else {
+			return null;
+		}
+	}	
+
+	function storeIngressCertificatePair(ns, name, certificatePair) {
+		const update = {
+			stringData: {
+				'tls.crt': certificatePair.cert,
+				'tls.key': certificatePair.key
+			}
+		};
+
+		return k8sClient.ns(ns).secret(name).update(update).then(function(result) {
+			if (result.kind === 'Status') {
+				console.warn(`Failed to update secret: ${result.reason} ${result.message}`);
+			}
+			return result;
+		});
+	}
+
+	function extractIngressCertificatePair(secret) {
+		if (secret.data && secret.data['tls.crt'] && secret.data['tls.key']) {
+			return {
+				cert: Buffer.from(secret.data['tls.crt'], 'base64').toString('UTF-8'),
+				key: Buffer.from(secret.data['tls.key'], 'base64').toString('UTF-8')
+			};
+		} else {
+			return null;
+		}
+	}
+
+	function shouldProcessIngress(ingress) {
+		return ingress.metadata.annotations && ingress.metadata.annotations['kubernetes.io/tls-ingress-ca'] === 'true';
+	}
+
+	function processIngress(ingress) {
+		// Check whether this ingress has TLS information, and if so, whether the referenced secret exists.
+		// If it does: all good, we just let things be. Eventually we will check the certificate and update it.
+		// If the secret does not exist we try to create it.
+		if (!ingress.spec.tls || ingress.spec.tls.length === 0) {
+			return Promise.resolve();
+		}
+
+		const caPromises = ingress.spec.tls.map(function(tls) {
+			return k8sClient.ns(ingress.metadata.namespace).secret(tls.secretName).get().then(function(result) {
+				let maybeCreate;
+				if (result.kind === 'Status' && result.status === 'Failure' && result.reason === 'NotFound') {
+					maybeCreate = k8sClient.ns(ingress.metadata.namespace).secrets.create({ metadata: { name: tls.secretName }});
+				} else {
+					maybeCreate = Promise.resolve(result);
 				}
-			}).then(function(secret) {
-				console.log(`Created secret ${secret.metadata.name}`);
-				if (argv.selfSignedCn) {
-					return createRootCertificate(secret, argv.selfSignedCn);
+				
+				return maybeCreate.then(function(secret) {
+					if (secret.kind !== 'Secret') {
+						throw new Error(`${secret.status}: ${secret.message} (${secret.reason})`);
+					}
+
+					const certificatePair = extractIngressCertificatePair(secret);
+					if (!certificatePair) {
+						return createCertificatePair(tls.hosts).then(function(certificatePair) {
+							return storeIngressCertificatePair(secret.metadata.namespace, secret.metadata.name, certificatePair).then(() => certificatePair);
+						});
+					} else {
+						return certificatePair;
+					}
+				});
+			});
+		});
+
+		return Promise.all(caPromises);
+	}
+
+	function getRootCertificatePair(ns, name) {
+		return k8sClient.ns(ns).secret(name).get().then(function(result) {
+			if (result.kind === 'Status' && result.status === 'Failure') {
+				if (result.reason === 'NotFound') {
+					if (argv.selfSignedCn) {
+						return k8sClient.ns(ns).secrets.create({ metadata: { name }}).then(function(secret) {
+							return createRootCertificatePair(argv.selfSignedCn).then(function(rootCertificatePair) {
+								return storeRootCertificatePair(secret.metadata.namespace, secret.metadata.name, rootCertificatePair).then(() => rootCertificatePair);
+							});
+						});
+					} else {
+						throw new Error(`No root certificate available in secret ${ns}/${name}, and no subject provided to create one`);
+					}
+				} else {
+					throw new Error(`No root certificate available in secret ${ns}/${name}: ${result.reason} ${result.message}`);
+				}
+			} else if (result.kind === 'Secret') {
+				const certificatePair = extractRootCertificatePair(result);
+				if (certificatePair) {
+					return certificatePair;
+				} else {
+					return createRootCertificatePair(argv.selfSignedCn).then(function(rootCertificatePair) {
+						return storeRootCertificatePair(result.metadata.namespace, result.metadata.name, rootCertificatePair).then(() => rootCertificatePair);
+					});
+				}
+			} else {
+				throw new Error(`Unexpected response for secret ${ns}/${name}: ${JSON.stringify(result)}`);
+			}
+		});
+	}
+
+	function createCertificatePair(hosts) {
+		return getRootCertificatePair(argv.namespace, argv.secret).then(function(rootCertificatePair) {
+			return new Promise(function(resolve, reject) {
+				return tmp.dir({ unsafeCleanup: true }, function(err, dir, cleanupCallback) {
+					// Create a new key first ...
+					const keyPath = path.resolve(dir, 'key.pem');
+					return openssl('genrsa', { 'out': keyPath , '2048': false }, function(err, stdout) {
+						console.log(stdout.toString('UTF-8'));
+						if (err) {
+							return reject(err);
+						}
+
+						// ... then a CSR with all host information ...
+						const confPath = path.resolve(dir, 'openssl.cnf');
+						const csrPath = path.resolve(dir, 'cert.csr');
+						// Use the first host for CN, but include all hosts in the subjectAlternativeName. Chrome 58, Firefox 48, and others
+						// no longer look at the subject as per RFC2818 (https://www.chromestatus.com/feature/4981025180483584)
+						const host = hosts[0];
+						const altNames = hosts.map((host, index) => `DNS.${index + 1} = ${host}`).join('\n');
+
+						let config = `
+							[req]
+							distinguished_name = req_distinguished_name
+							[req_distinguished_name]
+							[v3_ext]
+							basicConstraints = CA:FALSE
+							keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+							subjectAltName = @alt_names
+							[alt_names]
+							${altNames}`;
+
+						fs.writeFileSync(confPath, config, { encoding: 'UTF-8' });
+						return openssl('req', {
+							'batch': true,
+							'new': true,
+							'key': keyPath,
+							'out': csrPath,
+							'subj': `/CN=${host}`,
+							'config': confPath,
+							'extensions': 'v3_ext' }, function(err, stdout) {
+								console.log(stdout.toString('UTF-8'));
+								if (err) {
+									return reject(err);
+								}
+
+								// ... and finally create the certificate by signing with our CA
+								const caCertPath = path.resolve(dir, 'ca-cert.pem');
+								const caKeyPath = path.resolve(dir, 'ca-key.pem');
+								const certPath = path.resolve(dir, 'cert.pem');
+								fs.writeFileSync(caCertPath, rootCertificatePair.cert, 'UTF-8');
+								fs.writeFileSync(caKeyPath, rootCertificatePair.key, 'UTF-8');
+
+								return openssl('x509.req', {
+									'in': csrPath,
+									'out': certPath,
+									'CA': caCertPath,
+									'CAkey': caKeyPath,
+									'CAcreateserial': true,
+									'extensions': 'v3_ext',
+									'extfile': confPath,
+								}, function(err, stdout) {
+									console.log(stdout.toString('UTF-8'));
+									if (err) {
+										return reject(err);
+									}
+
+									// Now create the certificate pair, and resolve the promise.
+									const certificatePair = {
+										cert: fs.readFileSync(certPath, 'UTF-8'),
+										key: fs.readFileSync(keyPath, 'UTF-8')
+									}
+									
+									if (typeof cleanupCallback === 'function') {
+										cleanupCallback();
+									}
+
+									return resolve(certificatePair);
+								});
+							});
+					});
+				});
+			});
+		});
+	}
+
+	// Main "loop": list ingresses, and watch for changes. When watching finishes: re-sync.
+	// Any ingress (ADDED/MODIFIED from watch, or whatever we see on list) is checked for valid certificates
+	const ingresses = k8sClient.group('extensions', 'v1beta1').ns(argv.namespace).ingresses;
+	const secrets = k8sClient.ns(argv.namespace).secrets;
+
+	function mainLoop() {
+		ingresses.list().then(function(ingressList) {
+			console.log(`Processing ${ingressList.items.length} ingresses at version ${ingressList.metadata.resourceVersion}`);
+			ingressList.items.forEach(function(ingress) {
+				if (shouldProcessIngress(ingress)) {
+					console.log(`Processing ${ingress.metadata.name}`);
+					processIngress(ingress).then(function(certificatePairs) {
+						console.log(`Found/Created ${certificatePairs.length} certificate pairs for ${ingress.metadata.namespace}/${ingress.metadata.name}`);
+					});
 				}
 			});
-		} else if (result.kind === 'Secret') {
-			// Check that we have a key and certificate in them
-			if (result.data['cert.pem'] && result.data['key.pem']) {
-				return openssl('x509', Buffer.from(result.data['cert.pem'], 'base64'), { subject: true, noout: true }, function(err, stdout) {
-					const subject = stdout.toString('UTF-8').substring('subject= '.length).trim();
-					console.log(`Using existing cert.pem/key.pem from secrets ${result.metadata.name}: ${subject}`);
+
+			console.log('Watching ingresses...');
+			ingresses.watch(ingressList.metadata.resourceVersion)
+				.on('data', function(item) {
+					if (shouldProcessIngress(item.object)) {
+						switch (item.type) {
+						case 'DELETED':
+							// Delete the associated secret as well
+							item.object.tls.forEach(function(tls) {
+								if (tls.secretName) {
+									secrets.name(tls.secretName).delete().then(function(result) {
+										console.log(`Deleted secret ${tls.secretName}: ${JSON.stringify(result)}`);
+									});
+								}							
+							});
+							break;
+						case 'ADDED':
+						case 'MODIFIED':
+							processIngress(item.object);
+							break;
+						default:
+							console.warn(`Unkown watch event type ${item.type}, ignoring`);
+						}
+					}
+				})
+				.on('end', function() {
+					// Restart the whole thing.
+					console.log('Watch ended, re-syncing everything');
+					return mainLoop();
 				});
-			} else if (argv.selfSignedCn) {
-				return createRootCertificate(result, argv.selfSignedCn);
-			} else {
-				console.warn(`Missing cert.pem/key.pem in secrets ${result.metadata.name}`);
-			}
-		}
-	});
-
-	const ingresses = k8sClient.group('extensions', 'v1beta1').ns(argv.namespace).ingresses;
-	ingresses.list().then(function(ingressList) {
-		console.log(`list: * (${ingressList.metadata.resourceVersion})`);
-		ingressList.items.forEach(function(item) {
-			console.log(`list: ${item.metadata.name} (${item.metadata.resourceVersion})`);
 		});
+	}
 
-		ingresses.watch(ingressList.metadata.resourceVersion)
-		.on('data', function(item) {
-			console.log(`${item.type}: ${item.object.metadata.name}`);
-		});
-	});
+	// Start!
+	mainLoop();
 });
