@@ -69,33 +69,18 @@ if (argv.server) {
 
 const k8s = require('auto-kubernetes-client');
 
-k8s(k8sConfig, function(error, k8sClient) {
+k8s(k8sConfig).then(function(k8sClient) {
 	const ingresses = k8sClient.group('extensions', 'v1beta1').ns('master').ingresses;
-	function listAndWatch(err, response, ingressList) {
-		if (err) {
-			console.log(`list error: ${err.message}`);
-			return;
-		}
-		
-		ingressList.items.forEach(function(item) {			
-			console.log(`list: ${item.metadata.name} (${item.metadata.resourceVersion}`);
-		});
-		ingresses.watch(function(err, item) {
-			if (err) {
-				console.error(`watch error: ${err.message}`);
-				return;
-			}
-
-			if (item === null) {
-				// Watch timed out, restart it.
-				// XXX: How do we know the new version? Best to start from scratch, and list the current resources
-				//      again.
-				console.log('Reconciling after watch finished')
-				return ingresses.list(listAndWatch);
-			}
-			console.log(`${item.type}: ${item.object.metadata.name}`);
-		}, ingressList.metadata.resourceVersion);
-	}
 	
-	ingresses.list(listAndWatch);
+	ingresses.list().then(function(ingressList) {
+		console.log(`list: * (${ingressList.metadata.resourceVersion})`);
+		ingressList.items.forEach(function(item) {			
+			console.log(`list: ${item.metadata.name} (${item.metadata.resourceVersion})`);
+		});
+
+		ingresses.watch(ingressList.metadata.resourceVersion)
+		.on('data', function(item) {
+			console.log(`${item.type}: ${item.object.metadata.name}`);
+		});
+	});
 });
