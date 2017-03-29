@@ -77,23 +77,7 @@ const k8s = require('auto-kubernetes-client');
 k8s(k8sConfig, function(error, k8sClient) {
 	// Find the secret and read the certificate information from it.
 	// The secret may be missing, or we might be missing data in it.
-	k8sClient.ns(argv.namespace).secret(argv.secret).get(function(err, response, secret) {
-		if (err) {
-			// XXX: Check secret.code 'NotFound?'
-			// Assume the secret doesn't exist, and create it
-			k8sClient.ns(argv.namespace).secrets.create({
-				metadata: {
-					name: argv.secret
-				},
-				stringData: {
-					dummy: 'dummy'
-				}
-			}, function(err, response, secret) {
-				console.log(`Created secret ${secret.metadata.name}`);
-			});
-		}
-	});
-	if (argv.selfSignedCaSubject) {
+	function createRootCertificate(secret, subject) {
 		// Create a self-signed root CA certificate
 		// XXX: Should we verify whether that already exists in our secret?
 		const config = `
@@ -107,27 +91,60 @@ k8s(k8sConfig, function(error, k8sClient) {
 		tmp.dir({ unsafeCleanup: true }, function(err, dir, cleanupCallback) {
 			console.log(dir);
 			fs.writeFileSync(path.resolve(dir, 'openssl.cnf'), config, { encoding: 'UTF-8' });
+			const certPath = path.resolve(dir, 'cert.pem');
+			const keyPath = path.resolve(dir, 'key.pem');
 			openssl('req', new Buffer(config), {
 				'batch': true,
 				'new': true,
 				'newkey': 'rsa:2048',
 				'x509': true,
 				'nodes': true,
-				'subj': `/CN=${argv.selfSignedCaSubject}`,
-				'keyout': path.resolve(dir, 'key.pem'),
-				'out': path.resolve(dir, 'cert.pem'),
+				'subj': `/CN=${subject}`,
+				'keyout': keyPath,
+				'out': certPath,
 				'config': path.resolve(dir, 'openssl.cnf'),
 				'extensions': 'ext',
 			}, function(err, stdout) {
 				if (err) {
 					console.log(err.message);
 				}
-				console.log(stdout.toString('utf-8'));
 
-				return cleanupCallback();
+				// We now have the certificate and the key, and should be able to update the certificate with these.
+				const update = {
+					metadata: {
+						name: secret.metadata.name
+					},
+					stringData: {
+						'cert.pem': fs.readFileSync(certPath, 'UTF-8'),
+						'key.pem': fs.readFileSync(keyPath, 'UTF-8')
+					}
+				};
+
+				return k8sClient.ns(secret.metadata.namespace).secret(secret.metadata.name).update(update, function(err, response, secret) {
+					return cleanupCallback();
+				})
 			});
 		});
 	}
+
+	k8sClient.ns(argv.namespace).secret(argv.secret).get(function(err, response, secret) {
+		if (err) {
+			// XXX: Check secret.code 'NotFound?'
+			// Assume the secret doesn't exist, and create it
+			return k8sClient.ns(argv.namespace).secrets.create({
+				metadata: {
+					name: argv.secret
+				}
+			}, function(err, response, secret) {
+				console.log(`Created secret ${secret.metadata.name}`);
+				if (argv.selfSignedCn) {
+					return createRootCertificate(secret, argv.selfSignedCn);
+				}
+			});
+		} else if (argv.selfSignedCn) {
+			return createRootCertificate(secret, argv.selfSignedCn);
+		}
+	});
 
 	const ingresses = k8sClient.group('extensions', 'v1beta1').ns('master').ingresses;
 	function listAndWatch(err, response, ingressList) {
