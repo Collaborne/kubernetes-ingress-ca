@@ -15,7 +15,10 @@
                 "--cert", "${env:HOME}/.minikube/apiserver.crt",
                 "--key", "${env:HOME}/.minikube/apiserver.key",
                 "--cacert", "${env:HOME}/.minikube/ca.crt"
-            ]
+            ],
+            "env": {
+                "LOG4JS_CONFIG": "${workspaceRoot}/.vscode/log4js.json"
+            }
         }
     ]
 }

@@ -8,6 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const tmp = require('tmp');
 
+const logger = require('log4js').getLogger();
+
 const argv = yargs
 	.alias('s', 'server').describe('server', 'The address and port of the Kubernetes API server')
 	.alias('cacert', 'certificate-authority').describe('certificate-authority', 'Path to a cert. file for the certificate authority')
@@ -64,7 +66,7 @@ if (argv.server) {
 		auth: { bearer: fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf8') }
 	}
 } else {
-	console.error('Unknown Kubernetes API server');
+	logger.error('Unknown Kubernetes API server');
 	process.exit(1);
 }
 
@@ -96,7 +98,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 					'config': path.resolve(dir, 'openssl.cnf'),
 					'extensions': 'v3_ext',
 				}, function(err, stdout) {
-					console.debug(stdout.toString('UTF-8'));
+					logger.debug(stdout.toString('UTF-8'));
 					if (err) {
 						return reject(err);
 					}
@@ -127,7 +129,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 
 		return k8sClient.ns(ns).secret(name).update(update).then(function(result) {
 			if (result.kind === 'Status') {
-				console.warn(`Failed to update secret: ${result.reason} ${result.message}`);
+				logger.warn(`Failed to update secret: ${result.reason} ${result.message}`);
 			}
 			return result;
 		});
@@ -154,7 +156,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 
 		return k8sClient.ns(ns).secret(name).update(update).then(function(result) {
 			if (result.kind === 'Status') {
-				console.warn(`Failed to update secret: ${result.reason} ${result.message}`);
+				logger.warn(`Failed to update secret: ${result.reason} ${result.message}`);
 			}
 			return result;
 		});
@@ -250,7 +252,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 					// Create a new key first ...
 					const keyPath = path.resolve(dir, 'key.pem');
 					return openssl('genrsa', { 'out': keyPath , '2048': false }, function(err, stdout) {
-						console.debug(stdout.toString('UTF-8'));
+						logger.debug(stdout.toString('UTF-8'));
 						if (err) {
 							return reject(err);
 						}
@@ -283,7 +285,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 							'subj': `/CN=${host}`,
 							'config': confPath,
 							'extensions': 'v3_ext' }, function(err, stdout) {
-								console.debug(stdout.toString('UTF-8'));
+								logger.debug(stdout.toString('UTF-8'));
 								if (err) {
 									return reject(err);
 								}
@@ -304,7 +306,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 									'extensions': 'v3_ext',
 									'extfile': confPath,
 								}, function(err, stdout) {
-									console.debug(stdout.toString('UTF-8'));
+									logger.debug(stdout.toString('UTF-8'));
 									if (err) {
 										return reject(err);
 									}
@@ -335,17 +337,17 @@ k8s(k8sConfig).then(function(k8sClient) {
 
 	function mainLoop() {
 		ingresses.list().then(function(ingressList) {
-			console.log(`Processing ${ingressList.items.length} ingresses at version ${ingressList.metadata.resourceVersion}`);
+			logger.info(`Processing ${ingressList.items.length} ingresses at version ${ingressList.metadata.resourceVersion}`);
 			ingressList.items.forEach(function(ingress) {
 				if (shouldProcessIngress(ingress)) {
-					console.log(`Processing ${ingress.metadata.name}`);
+					logger.info(`Processing ${ingress.metadata.name}`);
 					processIngress(ingress).then(function(certificatePairs) {
-						console.log(`Found/Created ${certificatePairs.length} certificate pairs for ${ingress.metadata.namespace}/${ingress.metadata.name}`);
+						logger.info(`Found/Created ${certificatePairs.length} certificate pairs for ${ingress.metadata.namespace}/${ingress.metadata.name}`);
 					});
 				}
 			});
 
-			console.log('Watching ingresses...');
+			logger.info('Watching ingresses...');
 			ingresses.watch(ingressList.metadata.resourceVersion)
 				.on('data', function(item) {
 					if (shouldProcessIngress(item.object)) {
@@ -355,7 +357,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 							item.object.tls.forEach(function(tls) {
 								if (tls.secretName) {
 									secrets.name(tls.secretName).delete().then(function(result) {
-										console.log(`Deleted secret ${tls.secretName}: ${JSON.stringify(result)}`);
+										logger.info(`Deleted secret ${tls.secretName}: ${JSON.stringify(result)}`);
 									});
 								}							
 							});
@@ -365,13 +367,13 @@ k8s(k8sConfig).then(function(k8sClient) {
 							processIngress(item.object);
 							break;
 						default:
-							console.warn(`Unkown watch event type ${item.type}, ignoring`);
+							logger.warn(`Unkown watch event type ${item.type}, ignoring`);
 						}
 					}
 				})
 				.on('end', function() {
 					// Restart the whole thing.
-					console.log('Watch ended, re-syncing everything');
+					logger.info('Watch ended, re-syncing everything');
 					return mainLoop();
 				});
 		});
@@ -380,6 +382,6 @@ k8s(k8sConfig).then(function(k8sClient) {
 	// Start!
 	mainLoop();
 }).catch(function(err) {
-	console.error(`Uncaught error, aborting: ${err.message}`);
+	logger.error(`Uncaught error, aborting: ${err.message}`);
 	process.exit(1);
 });
