@@ -9,6 +9,7 @@
             "request": "launch",
             "name": "minikube",
             "program": "${workspaceRoot}/src/index.js",
+            "protocol": "inspector",
             "args": [
                 "-s", "https://192.168.99.100:8443",
                 "--cert", "${env:HOME}/.minikube/apiserver.crt",
