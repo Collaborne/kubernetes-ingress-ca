@@ -18,7 +18,7 @@ const argv = yargs
 	.default('self-signed-cn', '/CN=kubernetes-ingress-ca').describe('self-signed-cn', 'CN for automatically provisioned self-signed root certificate')
 	.default('namespace', 'default').describe('namespace', 'Namespace in which to create the secret')
 	.default('secret', 'ingress-ca').describe('secret', 'Name of the secret containing the root CA certificates')
-	.default('annotation', 'kubernetes.io/tls-ingress-ca').describe('annotation', 'The annotation to check when searching for ingresses')
+	.default('annotation', 'kubernetes.collaborne.com/tls-ingress-ca').describe('annotation', 'The annotation to check when searching for ingresses')
 	.help()
 	.argv;
 
