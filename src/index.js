@@ -59,7 +59,7 @@ if (argv.server) {
 	}
 } else if (process.env.KUBERNETES_SERVICE_HOST) {
 	k8sConfig = {
-		url: process.env.KUBERNETES_SERVICE_HOST,
+		url: `https://${process.env.KUBERNETES_SERVICE_HOST}:${process.env.KUBERNETES_SERVICE_PORT}`,
 		ca: fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/ca.crt', 'utf8'),
 		auth: { bearer: fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf8') }
 	}
