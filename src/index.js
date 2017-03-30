@@ -96,6 +96,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 					'config': path.resolve(dir, 'openssl.cnf'),
 					'extensions': 'v3_ext',
 				}, function(err, stdout) {
+					console.debug(stdout.toString('UTF-8'));
 					if (err) {
 						return reject(err);
 					}
@@ -249,7 +250,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 					// Create a new key first ...
 					const keyPath = path.resolve(dir, 'key.pem');
 					return openssl('genrsa', { 'out': keyPath , '2048': false }, function(err, stdout) {
-						console.log(stdout.toString('UTF-8'));
+						console.debug(stdout.toString('UTF-8'));
 						if (err) {
 							return reject(err);
 						}
@@ -282,7 +283,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 							'subj': `/CN=${host}`,
 							'config': confPath,
 							'extensions': 'v3_ext' }, function(err, stdout) {
-								console.log(stdout.toString('UTF-8'));
+								console.debug(stdout.toString('UTF-8'));
 								if (err) {
 									return reject(err);
 								}
@@ -303,7 +304,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 									'extensions': 'v3_ext',
 									'extfile': confPath,
 								}, function(err, stdout) {
-									console.log(stdout.toString('UTF-8'));
+									console.debug(stdout.toString('UTF-8'));
 									if (err) {
 										return reject(err);
 									}
