@@ -1,5 +1,8 @@
 FROM node:boron-alpine
 
+# Install OpenSSL binaries
+RUN apk add --no-cache openssl
+
 # Configure the environment
 ENV NODE_ENV=production
 
