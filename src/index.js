@@ -202,6 +202,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 					const certificatePair = extractIngressCertificatePair(secret);
 					if (!certificatePair) {
 						return createCertificatePair(tls.hosts).then(function(certificatePair) {
+							logger.info(`Created certificate pair for ${secret.metadata.namespace}/${secret.metadata.name}`);
 							return storeIngressCertificatePair(secret.metadata.namespace, secret.metadata.name, certificatePair).then(() => certificatePair);
 						});
 					} else {
@@ -236,6 +237,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 					return certificatePair;
 				} else {
 					return createRootCertificatePair(argv.selfSignedCn).then(function(rootCertificatePair) {
+						logger.info(`Created root certificate pair for ${result.metadata.namespace}/${result.metadata.name}`);
 						return storeRootCertificatePair(result.metadata.namespace, result.metadata.name, rootCertificatePair).then(() => rootCertificatePair);
 					});
 				}
