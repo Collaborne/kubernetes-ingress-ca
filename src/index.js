@@ -354,13 +354,15 @@ k8s(k8sConfig).then(function(k8sClient) {
 						switch (item.type) {
 						case 'DELETED':
 							// Delete the associated secret as well
-							item.object.tls.forEach(function(tls) {
-								if (tls.secretName) {
-									secrets.name(tls.secretName).delete().then(function(result) {
-										logger.info(`Deleted secret ${tls.secretName}: ${JSON.stringify(result)}`);
-									});
-								}							
-							});
+							if (item.object.spec.tls) {
+								item.object.spec.tls.forEach(function(tls) {
+									if (tls.secretName) {
+										secrets.name(tls.secretName).delete().then(function(result) {
+											logger.info(`Deleted secret ${tls.secretName}: ${JSON.stringify(result)}`);
+										});
+									}							
+								});
+							}
 							break;
 						case 'ADDED':
 						case 'MODIFIED':
