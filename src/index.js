@@ -379,4 +379,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 
 	// Start!
 	mainLoop();
+}).catch(function(err) {
+	console.error(`Uncaught error, aborting: ${err.message}`);
+	process.exit(1);
 });
