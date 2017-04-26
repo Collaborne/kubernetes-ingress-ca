@@ -24,21 +24,6 @@ const argv = yargs
 	.help()
 	.argv;
 
-/*
- * A tiny CA for use in Kubernetes
- *
- * This will watch Ingress resources, and if these are annotated with
- * 'kubernetes.collaborne.com/tls-ingress-ca': 'true' this CA will try to create
- * a suitable certificate.
- *
- * The only required configuration is the name of the Secrets resource that
- * contains the root CA certificate and key, in the `ca.crt` and `ca.key`
- * entries.
- *
- * Kubernetes will be accessed using the 'default' ServiceAccount (see
- * https://kubernetes.io/docs/user-guide/service-accounts/).
- */
-
 /** The basic configuration for accessing the API server */
 let k8sConfig;
 if (argv.server) {
