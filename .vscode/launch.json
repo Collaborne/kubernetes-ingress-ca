@@ -14,7 +14,8 @@
                 "-s", "https://192.168.99.100:8443",
                 "--cert", "${env:HOME}/.minikube/apiserver.crt",
                 "--key", "${env:HOME}/.minikube/apiserver.key",
-                "--cacert", "${env:HOME}/.minikube/ca.crt"
+                "--cacert", "${env:HOME}/.minikube/ca.crt",
+                "--namespace", "master"
             ],
             "env": {
                 "LOG4JS_CONFIG": "${workspaceRoot}/.vscode/log4js.json"
