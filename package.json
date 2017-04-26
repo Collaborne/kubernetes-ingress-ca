@@ -20,7 +20,7 @@
     "CA",
     "TLS"
   ],
-  "author": "Andreas Kohn <andreas.kohn@gmail.com>",
+  "author": "Collaborne B.V. <opensource@collaborne.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/ankon/kubernetes-ingress-ca/issues"
