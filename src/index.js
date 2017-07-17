@@ -171,29 +171,30 @@ k8s(k8sConfig).then(function(k8sClient) {
 		}
 
 		const caPromises = ingress.spec.tls.map(function(tls) {
-			return k8sClient.ns(ingress.metadata.namespace).secret(tls.secretName).get().then(function(result) {
-				let maybeCreate;
-				if (result.kind === 'Status' && result.status === 'Failure' && result.reason === 'NotFound') {
-					maybeCreate = k8sClient.ns(ingress.metadata.namespace).secrets.create({ metadata: { name: tls.secretName }});
+			return k8sClient.ns(ingress.metadata.namespace).secret(tls.secretName).get().catch(function(err) {
+				if (err.kind === 'Status' && err.status === 'Failure' && err.reason === 'NotFound') {
+					// Create the missing secret first
+					logger.info(`Creating new secret ${ingress.metadata.namespace}/${tls.secretName}`);
+					return k8sClient.ns(ingress.metadata.namespace).secrets.create({ metadata: { name: tls.secretName }});
 				} else {
-					maybeCreate = Promise.resolve(result);
+					// Some other error: throw this out further, hoping that someone will handle it better.
+					logger.warn(`Cannot get secret ${ingress.metadata.namespace}/${tls.secretName}: ${err.message}`);
+					throw err;
 				}
-				
-				return maybeCreate.then(function(secret) {
-					if (secret.kind !== 'Secret') {
-						throw new Error(`${secret.status}: ${secret.message} (${secret.reason})`);
-					}
+			}).then(function(secret) {
+				if (secret.kind !== 'Secret') {
+					throw new Error(`${secret.status}: ${secret.message} (${secret.reason})`);
+				}
 
-					const certificatePair = extractIngressCertificatePair(secret);
-					if (!certificatePair) {
-						return createCertificatePair(tls.hosts).then(function(certificatePair) {
-							logger.info(`Created certificate pair for ${secret.metadata.namespace}/${secret.metadata.name}`);
-							return storeIngressCertificatePair(secret.metadata.namespace, secret.metadata.name, certificatePair).then(() => certificatePair);
-						});
-					} else {
-						return certificatePair;
-					}
-				});
+				const certificatePair = extractIngressCertificatePair(secret);
+				if (!certificatePair) {
+					return createCertificatePair(tls.hosts).then(function(certificatePair) {
+						logger.info(`Created certificate pair for ${secret.metadata.namespace}/${secret.metadata.name}`);
+						return storeIngressCertificatePair(secret.metadata.namespace, secret.metadata.name, certificatePair).then(() => certificatePair);
+					});
+				} else {
+					return certificatePair;
+				}
 			});
 		});
 
