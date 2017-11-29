@@ -27,8 +27,6 @@ const argv = yargs
 /** The basic configuration for accessing the API server */
 let k8sConfig;
 if (argv.server) {
-	const fs = require('fs');
-
 	k8sConfig = {
 		url: argv.server,
 		insecureSkipTlsVerify: argv.insecureSkipTlsVerify
