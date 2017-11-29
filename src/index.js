@@ -167,6 +167,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 		// If it does: all good, we just let things be. Eventually we will check the certificate and update it.
 		// If the secret does not exist we try to create it.
 		if (!ingress.spec.tls || ingress.spec.tls.length === 0) {
+			logger.warn(`No TLS specs on ${ingress.metadata.name}`);
 			return Promise.resolve();
 		}
 
