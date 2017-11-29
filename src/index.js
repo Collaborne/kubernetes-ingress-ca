@@ -346,7 +346,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 										secrets.name(tls.secretName).delete().then(function(result) {
 											logger.info(`Deleted secret ${tls.secretName}: ${JSON.stringify(result)}`);
 										});
-									}							
+									}
 								});
 							}
 							break;
