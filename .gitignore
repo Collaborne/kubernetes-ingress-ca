@@ -1,7 +1,10 @@
 /node_modules/
 /deploy/
 npm-debug.log
-npm-shrinkwrap.json
 
 /.vscode/
+
+npm-shrinkwrap.json
+package-lock.json
+yarn.lock
 
