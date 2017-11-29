@@ -270,44 +270,45 @@ k8s(k8sConfig).then(function(k8sClient) {
 							'out': csrPath,
 							'subj': `/CN=${host}`,
 							'config': confPath,
-							'extensions': 'v3_ext' }, function(err, stdout) {
+							'extensions': 'v3_ext'
+						}, function(err, stdout) {
+							if (err) {
+								return reject(err);
+							}
+
+							// ... and finally create the certificate by signing with our CA
+							const caCertPath = path.resolve(dir, 'ca-cert.pem');
+							const caKeyPath = path.resolve(dir, 'ca-key.pem');
+							const certPath = path.resolve(dir, 'cert.pem');
+							fs.writeFileSync(caCertPath, rootCertificatePair.cert, 'UTF-8');
+							fs.writeFileSync(caKeyPath, rootCertificatePair.key, 'UTF-8');
+
+							return openssl('x509.req', {
+								'in': csrPath,
+								'out': certPath,
+								'CA': caCertPath,
+								'CAkey': caKeyPath,
+								'CAcreateserial': true,
+								'extensions': 'v3_ext',
+								'extfile': confPath,
+							}, function(err, stdout) {
 								if (err) {
 									return reject(err);
 								}
 
-								// ... and finally create the certificate by signing with our CA
-								const caCertPath = path.resolve(dir, 'ca-cert.pem');
-								const caKeyPath = path.resolve(dir, 'ca-key.pem');
-								const certPath = path.resolve(dir, 'cert.pem');
-								fs.writeFileSync(caCertPath, rootCertificatePair.cert, 'UTF-8');
-								fs.writeFileSync(caKeyPath, rootCertificatePair.key, 'UTF-8');
-
-								return openssl('x509.req', {
-									'in': csrPath,
-									'out': certPath,
-									'CA': caCertPath,
-									'CAkey': caKeyPath,
-									'CAcreateserial': true,
-									'extensions': 'v3_ext',
-									'extfile': confPath,
-								}, function(err, stdout) {
-									if (err) {
-										return reject(err);
-									}
-
-									// Now create the certificate pair, and resolve the promise.
-									const certificatePair = {
-										cert: fs.readFileSync(certPath, 'UTF-8'),
-										key: fs.readFileSync(keyPath, 'UTF-8')
-									}
+								// Now create the certificate pair, and resolve the promise.
+								const certificatePair = {
+									cert: fs.readFileSync(certPath, 'UTF-8'),
+									key: fs.readFileSync(keyPath, 'UTF-8')
+								}
 									
-									if (typeof cleanupCallback === 'function') {
-										cleanupCallback();
-									}
+								if (typeof cleanupCallback === 'function') {
+									cleanupCallback();
+								}
 
-									return resolve(certificatePair);
-								});
+								return resolve(certificatePair);
 							});
+						});
 					});
 				});
 			});
