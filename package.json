@@ -1,6 +1,6 @@
 {
   "name": "kubernetes-ingress-ca",
-  "version": "0.4.3",
+  "version": "0.5.0-alpha.1",
   "description": "A very simple certificate authority for kubernetes ingress resources",
   "main": "src/index.js",
   "scripts": {
