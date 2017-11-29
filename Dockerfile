@@ -1,4 +1,4 @@
-FROM node:boron-alpine
+FROM node:carbon-alpine
 
 # Install OpenSSL binaries
 RUN apk add --no-cache openssl
