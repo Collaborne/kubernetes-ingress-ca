@@ -168,7 +168,7 @@ k8s(k8sConfig).then(function(k8sClient) {
 		// If the secret does not exist we try to create it.
 		if (!ingress.spec.tls || ingress.spec.tls.length === 0) {
 			logger.warn(`No TLS specs on ${ingress.metadata.name}`);
-			return Promise.resolve();
+			return Promise.resolve([]);
 		}
 
 		const caPromises = ingress.spec.tls.map(function(tls) {
