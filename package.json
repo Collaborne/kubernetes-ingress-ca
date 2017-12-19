@@ -32,7 +32,7 @@
     "log4js": "^2.3.12",
     "npm-warn-shrinkwrap": "^1.0.2",
     "openssl-wrapper": "^0.3.4",
-    "tmp": "0.0.31",
+    "tmp": "0.0.33",
     "yargs": "^10.0.3"
   },
   "devDependencies": {
