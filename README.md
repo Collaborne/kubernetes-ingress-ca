@@ -1,6 +1,4 @@
-# kubernetes-ingress-ca [![Build Status](https://travis-ci.org/Collaborne/kubernetes-ingress-ca.svg?branch=master)](https://travis-ci.org/Collaborne/kubernetes-ingress-ca)
-
-[![Greenkeeper badge](https://badges.greenkeeper.io/Collaborne/kubernetes-ingress-ca.svg)](https://greenkeeper.io/)
+# kubernetes-ingress-ca [![Build Status](https://travis-ci.org/Collaborne/kubernetes-ingress-ca.svg?branch=master)](https://travis-ci.org/Collaborne/kubernetes-ingress-ca) [![Greenkeeper badge](https://badges.greenkeeper.io/Collaborne/kubernetes-ingress-ca.svg)](https://greenkeeper.io/)
 
 A tiny CA for use in Kubernetes
 
