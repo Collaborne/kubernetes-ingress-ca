@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "install": "npm-warn-shrinkwrap",
-    "prepublish": "eslint src",
+    "lint": "eslint src",
+    "prepublish": "npm run lint",
     "postinstall": "check-node-version --package",
     "test": "echo 'No tests yet'",
     "start": "node src/index.js"
