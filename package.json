@@ -30,7 +30,7 @@
   "dependencies": {
     "auto-kubernetes-client": "^0.6.1",
     "check-node-version": "^3.0.0",
-    "log4js": "^3.0.0",
+    "log4js": "^4.0.0",
     "npm-warn-shrinkwrap": "^1.0.2",
     "openssl-wrapper": "^0.3.4",
     "tmp": "0.0.33",
