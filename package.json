@@ -37,7 +37,7 @@
     "yargs": "^13.1.0"
   },
   "devDependencies": {
-    "eslint": "^5.0.0"
+    "eslint": "^6.0.0"
   },
   "engines": {
     "node": ">=8.9.0"
