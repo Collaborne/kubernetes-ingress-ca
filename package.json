@@ -29,7 +29,7 @@
   "homepage": "https://github.com/ankon/kubernetes-ingress-ca#readme",
   "dependencies": {
     "auto-kubernetes-client": "^0.6.1",
-    "check-node-version": "^3.0.0",
+    "check-node-version": "^4.0.2",
     "log4js": "^6.0.0",
     "npm-warn-shrinkwrap": "^1.0.2",
     "openssl-wrapper": "^0.3.4",
