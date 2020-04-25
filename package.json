@@ -33,7 +33,7 @@
     "log4js": "^6.0.0",
     "npm-warn-shrinkwrap": "^1.0.2",
     "openssl-wrapper": "^0.3.4",
-    "tmp": "0.1.0",
+    "tmp": "0.2.0",
     "yargs": "^15.0.1"
   },
   "devDependencies": {
