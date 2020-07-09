@@ -8,6 +8,12 @@ The only required configuration is the name of the Secrets resource that contain
 
 Kubernetes will be accessed using the 'default' ServiceAccount (see https://kubernetes.io/docs/user-guide/service-accounts/).
 
+## This project is likely obsolete and not what you need
+
+See https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster/ for how to manage TLS certificates in a Kubernetes cluster.
+
+If you still think this project might be useful, read on :)
+
 ## Usage
 
 Deploy the CA into kubernetes:
